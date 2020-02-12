@@ -206,7 +206,7 @@ class ModelStatistics():
         with likelihood loss and binary loss,
         with and without tolerance to the word burstiness.
         '''
-        if recalculate_n:
+        if recalculate_n and not calculate_n:
             self.recalculate_n(batch_vectorizer)
         if calculate_n:
             self.calculate_n(batch_vectorizer)
