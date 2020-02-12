@@ -76,10 +76,10 @@ class ModelStatistics():
         tokens = functools.reduce(operator.iconcat, tokens, [])
 
         ndw = np.concatenate([np.array(doc2token[doc_id]['weights']) for doc_id in docs_unique])
-        ndw = np.tile(ndw, (self.ptdw.shape[0], 1))
+        self._ndw = np.tile(ndw, (self.ptdw.shape[0], 1))
 
         self.ptdw.columns = pd.MultiIndex.from_arrays([docs, tokens], names=('doc', 'token'))
-        self.ntdw = self.ptdw * ndw
+        self.ntdw = self.ptdw * self._ndw
 
         self.ntd = self.ntdw.groupby(level=0, axis=1).sum()
         self.nwt = self.ntdw.groupby(level=1, axis=1).sum().T
@@ -87,11 +87,32 @@ class ModelStatistics():
         self.nt = self.nwt.sum(axis=0).values
         self.nd = self.ntd.sum(axis=0).values
 
-    def calculate_s_t(self, batch_vectorizer, alpha=None, use_ptdw=None):
+    def recalculate_n(self, batch_vectorizer):
+        self.theta = self.model.transform(batch_vectorizer)
+        self.pwd = np.dot(self.phi.values, self.theta.values)
+
+        previous_num_document_passes = self.model._num_document_passes
+        self.model._num_document_passes = 10
+        self.ptdw = pd.DataFrame(
+            self.model.transform(batch_vectorizer=batch_vectorizer, theta_matrix_type='dense_ptdw').values,
+            self.ptdw.index,
+            self.ptdw.columns
+        )
+        self.model._num_document_passes = previous_num_document_passes
+
+        self.ntdw = self.ptdw * self._ndw
+
+        self.ntd = self.ntdw.groupby(level=0, axis=1).sum()
+        self.nwt = self.ntdw.groupby(level=1, axis=1).sum().T
+        self.nt = self.nwt.sum(axis=0).values
+        self.nd = self.ntd.sum(axis=0).values
+
+    def calculate_s_t(self, batch_vectorizer, alpha=None, use_ptdw=None, calculate_n=False):
         '''
         Calculates semantic heterogenity of topic in model.
         '''
-        self.calculate_n(batch_vectorizer)
+        if calculate_n:
+            self.calculate_n(batch_vectorizer)
         
         if alpha is not None:
             model_loss = (self.pwd < alpha / self.nd).astype(int)
@@ -108,11 +129,12 @@ class ModelStatistics():
                 s_t[t] = weigh_average(ntwd_t, model_loss, [0,1])
         return s_t
 
-    def calculate_imp_t(self, batch_vectorizer, binary_loss=False, use_ptdw=False):
+    def calculate_imp_t(self, batch_vectorizer, binary_loss=False, use_ptdw=False, calculate_n=False):
         '''
         Calculates topic impurity for every topic in model.
         '''
-        self.calculate_n(batch_vectorizer)
+        if calculate_n:
+            self.calculate_n(batch_vectorizer)
         
         imp_t = np.zeros(self.ntd.shape[0])
         for t in range(imp_t.shape[0]):
@@ -133,11 +155,12 @@ class ModelStatistics():
                 imp_t[t] = weigh_average(ntwd_t, model_loss[:, np.newaxis], [0,1])
         return imp_t
 
-    def calculate_s_td(self, batch_vectorizer, alpha=None, use_ptdw=False):
+    def calculate_s_td(self, batch_vectorizer, alpha=None, use_ptdw=False, calculate_n=False):
         '''
         Calculates document coherence with topic.
         '''
-        self.calculate_n(batch_vectorizer)
+        if calculate_n:
+            self.calculate_n(batch_vectorizer)
 
         if alpha is not None:
             model_loss = (self.pwd < alpha / self.nd).astype(int)
@@ -154,11 +177,12 @@ class ModelStatistics():
                 s_td[t, :] = weigh_average(ntwd_t, model_loss, 0)
         return s_td
 
-    def calculate_s_wt(self, batch_vectorizer, alpha=None, use_ptdw=False):
+    def calculate_s_wt(self, batch_vectorizer, alpha=None, use_ptdw=False, calculate_n=False):
         '''
         Calculates token coherence with topic.
         '''
-        self.calculate_n(batch_vectorizer)
+        if calculate_n:
+            self.calculate_n(batch_vectorizer)
 
         if alpha is not None:
             model_loss = (self.pwd < alpha / self.nd).astype(int)
@@ -176,13 +200,16 @@ class ModelStatistics():
 
         return s_wt
 
-    def calculate_topic_statistics(self, batch_vectorizer, alpha=1):
+    def calculate_topic_statistics(self, batch_vectorizer, alpha=1, recalculate_n=True, calculate_n=False):
         '''
         Calculates topic semantic heterogenity and topic impurity
         with likelihood loss and binary loss,
         with and without tolerance to the word burstiness.
         '''
-        self.calculate_n(batch_vectorizer)
+        if recalculate_n:
+            self.recalculate_n(batch_vectorizer)
+        if calculate_n:
+            self.calculate_n(batch_vectorizer)
 
         s_t = self.calculate_s_t(batch_vectorizer)
         bin_s_t = self.calculate_s_t(batch_vectorizer, alpha=alpha)
