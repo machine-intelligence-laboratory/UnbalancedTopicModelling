@@ -36,6 +36,8 @@ class ModelStatistics():
     def __init__(self, model):
         self.model = model
         self.phi = model.get_phi()
+        if '10' in artm.version():
+            self.phi = self.phi.set_index(pd.MultiIndex.from_tuples(self.phi.index))
 
     def calculate_n(self, batch_vectorizer):
         '''
@@ -44,7 +46,7 @@ class ModelStatistics():
         self.theta = self.model.transform(batch_vectorizer)
         self.pwd = np.dot(self.phi.values, self.theta.values)
         self.nwd = np.zeros((self.phi.shape[0], self.theta.shape[1]))
-        self.nwd = pd.DataFrame(self.nwd, self.phi.index.tolist(), self.theta.columns.tolist())
+        self.nwd = pd.DataFrame(self.nwd, self.phi.index, self.theta.columns)
 
         doc2token = {}
         for batch_id in range(len(batch_vectorizer._batches_list)):
@@ -62,7 +64,10 @@ class ModelStatistics():
                     doc2token[theta_item_id]['tokens'].append(batch.token[token_id])
                     doc2token[theta_item_id]['weights'].append(token_weight)
 
-                    self.nwd.loc[batch.token[token_id], theta_item_id] += token_weight
+                    try:
+                        self.nwd.loc[batch.token[token_id], theta_item_id] += token_weight
+                    except KeyError:
+                        self.nwd.loc[(batch.class_id[token_id], batch.token[token_id]), theta_item_id] += token_weight
 
         previous_num_document_passes = self.model._num_document_passes
         self.model._num_document_passes = 10

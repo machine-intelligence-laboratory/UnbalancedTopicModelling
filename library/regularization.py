@@ -67,9 +67,11 @@ class SemanticHeterogenityRegularizer(BaseRegularizer):
 
         self.statistics = semantic_statistics
         self.batch_vectorizer = batch_vectorizer
+        
+        self.statistics.calculate_n(self.batch_vectorizer)
 
     def grad(self, pwt, nwt):
-        self.statistics.calculate_n(self.batch_vectorizer)
+        self.statistics.recalculate_n(self.batch_vectorizer)
 
         p_t = np.zeros(self.statistics.theta.shape[0])
         for t in range(p_t.shape[0]):
