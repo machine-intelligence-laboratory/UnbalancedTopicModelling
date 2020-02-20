@@ -47,3 +47,7 @@ def plot_statistics(model_statistics_time, topic_statistics, plotname=None, titl
 
     if plotname is not None:
         plt.savefig(plotname)
+
+
+def plot_top_tokens_evolution():
+    pass

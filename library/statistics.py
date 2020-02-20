@@ -46,7 +46,9 @@ class ModelStatistics():
         self.theta = self.model.transform(batch_vectorizer)
         self.pwd = np.dot(self.phi.values, self.theta.values)
         self.nwd = np.zeros((self.phi.shape[0], self.theta.shape[1]))
-        self.nwd = pd.DataFrame(self.nwd, self.phi.index, self.theta.columns)
+        phi_index = self.phi.index
+        is_phi_multiindex = isinstance(phi_index, pd.core.indexes.multi.MultiIndex)
+        self.nwd = pd.DataFrame(self.nwd, phi_index, self.theta.columns)
 
         doc2token = {}
         for batch_id in range(len(batch_vectorizer._batches_list)):
@@ -61,13 +63,17 @@ class ModelStatistics():
 
                 doc2token[theta_item_id] = {'tokens': [], 'weights': []}
                 for token_id, token_weight in zip(item.token_id, item.token_weight):
-                    doc2token[theta_item_id]['tokens'].append(batch.token[token_id])
+                    token = batch.token[token_id]
+                    modality = batch.class_id[token_id]
+
+                    doc2token[theta_item_id]['tokens'].append(token)
                     doc2token[theta_item_id]['weights'].append(token_weight)
 
-                    try:
-                        self.nwd.loc[batch.token[token_id], theta_item_id] += token_weight
-                    except KeyError:
-                        self.nwd.loc[(batch.class_id[token_id], batch.token[token_id]), theta_item_id] += token_weight
+                    if is_phi_multiindex:
+                        if phi_index.isin([(modality, token)]).any():
+                            self.nwd.loc[(modality, token), theta_item_id] += token_weight
+                    elif phi_index.isin([token]).any():
+                        self.nwd.loc[token, theta_item_id] += token_weight
 
         previous_num_document_passes = self.model._num_document_passes
         self.model._num_document_passes = 10
@@ -122,7 +128,9 @@ class ModelStatistics():
         if alpha is not None:
             model_loss = (self.pwd < alpha / self.nd).astype(int)
         else:
-            model_loss = np.log(self.nwd / self.nd / self.pwd + (self.nwd == 0).astype(int))
+            model_loss = self.nwd / self.nd / self.pwd
+            model_loss[np.isnan(model_loss)] = 1
+            model_loss = np.log(model_loss)
 
         s_t = np.zeros(self.ntd.shape[0])
         for t in range(s_t.shape[0]):
@@ -131,6 +139,7 @@ class ModelStatistics():
                 s_t[t] = weigh_average(ptwd_t, model_loss, [0,1])
             else:
                 ntwd_t = self.nwd * ptwd_t / self.pwd
+                ntwd_t[np.isnan(ntwd_t)] = 1
                 s_t[t] = weigh_average(ntwd_t, model_loss, [0,1])
         return s_t
 
@@ -157,6 +166,7 @@ class ModelStatistics():
                 imp_t[t] = weigh_average(ptwd_t, model_loss[:, np.newaxis], [0,1])
             else:
                 ntwd_t = self.nwd * ptwd_t / self.pwd
+                ntwd_t[np.isnan(ntwd_t)] = 1
                 imp_t[t] = weigh_average(ntwd_t, model_loss[:, np.newaxis], [0,1])
         return imp_t
 
@@ -170,7 +180,9 @@ class ModelStatistics():
         if alpha is not None:
             model_loss = (self.pwd < alpha / self.nd).astype(int)
         else:
-            model_loss = np.log(self.nwd / self.nd / self.pwd + (self.nwd == 0).astype(int))
+            model_loss = self.nwd / self.nd / self.pwd
+            model_loss[np.isnan(model_loss)] = 1
+            model_loss = np.log(model_loss)
 
         s_td = np.zeros(self.ntd.shape)
         for t in range(s_td.shape[0]):
@@ -179,6 +191,7 @@ class ModelStatistics():
                 s_td[t, :] = weigh_average(ptwd_t, model_loss, 0)
             else:
                 ntwd_t = self.nwd * ptwd_t / self.pwd
+                ntwd_t[np.isnan(ntwd_t)] = 1
                 s_td[t, :] = weigh_average(ntwd_t, model_loss, 0)
         return s_td
 
@@ -192,7 +205,9 @@ class ModelStatistics():
         if alpha is not None:
             model_loss = (self.pwd < alpha / self.nd).astype(int)
         else:
-            model_loss = np.log(self.nwd / self.nd / self.pwd + (self.nwd == 0).astype(int))
+            model_loss = self.nwd / self.nd / self.pwd
+            model_loss[np.isnan(model_loss)] = 1
+            model_loss = np.log(model_loss)
 
         s_wt = np.zeros(self.nwt.shape)
         for t in range(s_wt.shape[1]):
@@ -201,6 +216,7 @@ class ModelStatistics():
                 s_wt[:, t] = weigh_average(ptwd_t, model_loss, 1)
             else:
                 ntwd_t = self.nwd * ptwd_t / self.pwd
+                ntwd_t[np.isnan(ntwd_t)] = 1
                 s_wt[:, t] = weigh_average(ntwd_t, model_loss, 1)
 
         return s_wt
