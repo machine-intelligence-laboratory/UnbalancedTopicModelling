@@ -90,11 +90,13 @@ class SemanticHeterogenityRegularizer(BaseRegularizer):
             )
             gamma_wd += ptwd_t / p_t[t]
 
-        grad_array = np.repeat(
-            (self.tau * gamma_wd).sum(axis=1)[..., np.newaxis],
-            self.statistics.phi.shape[1],
-            axis=1
-        )
+        grad_array = np.zeros(self.statistics.nwt.shape)
+        for t in range(p_t.shape[0]):
+            grad_array[:, t] = np.sum(
+                (self.statistics.theta.iloc[t, :].values.reshape(1, -1) * gamma_wd *
+                 self.statistics.nwd) / self.statistics.pwd,
+                axis=1
+            )
 
         return grad_array
 

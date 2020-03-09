@@ -64,7 +64,7 @@ class BleiTopTokens():
             
             if self.ind2tok is not None:
                 topic_top_tokens[topic_name]['tokens'] = list(map(lambda x: self.ind2tok[x], 
-                                                                topic_column.index[top_tokens_indexes]))
+                                                                  topic_column.index[top_tokens_indexes]))
             else:
                 topic_top_tokens[topic_name]['tokens'] = topic_column.index[top_tokens_indexes].tolist()
 
